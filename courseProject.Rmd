@@ -1,0 +1,88 @@
+---
+title: "Practical Machine Learning Course Project"
+author: "Jason Weng"
+highlighter: highlight.js
+output:
+  html_document: default
+  pdf_document: default
+mode: selfcontained
+hitheme: tomorrow
+subtitle: Exercise Manner Prediction
+framework: io2012
+widgets: mathjax
+---
+
+````{r setup, cache = FALSE, echo = FALSE, message = FALSE, warning = FALSE, tidy = FALSE, results='hide', error=FALSE}
+# make this an external chunk that can be included in any file
+library(knitr)
+options(width = 100)
+opts_chunk$set(message = F, error = F, warning = F, comment = NA, dpi = 100, tidy = F, cache.path = '.cache/', fig.path = 'fig/')
+
+#options(xtable.type = 'html')
+knit_hooks$set(inline = function(x) {
+  if(is.numeric(x)) {
+    round(x, getOption('digits'))
+  } else {
+    paste(as.character(x), collapse = ', ')
+  }
+})
+#knit_hooks$set(plot = knitr:::hook_plot_html)
+runif(1)
+```
+
+## Executive Summary 
+* Download the data.
+* step 2
+
+## Download traing data
+```{r fig.height=4,fig.width=4,echo=TRUE}
+require(data.table)
+url <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+training.dt <- fread(url)
+
+url <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+testing.dt <- fread(url)
+str(training.dt)
+```
+
+## Process Training Data
+### Find predictors: Choose variables contains(Belt, arm, dumbbell, and forearm ) and do not have any missing value as predictors
+```{r fig.height=4,fig.width=4,echo=TRUE}
+is.missing <- sapply(testing.dt, function (x) any(is.na(x) | x == ""))
+is.predictor <- !is.missing & grepl("belt|[^(fore)]arm|dumbbell|forearm", names(testing.dt))
+pred.candidates <- names(testing.dt)[is.predictor]
+pred.candidates
+```
+
+### Build the training data with predictors and target.
+```{r fig.height=4,fig.width=6,fig.align='center',echo=TRUE}
+train.vars <- c("classe", pred.candidates)
+train.dt <- training.dt[, train.vars, with=FALSE]
+dim(train.dt)
+```
+
+### Make "classe" variable into a factor 
+```{r fig.height=4,fig.width=6,fig.align='center',echo=TRUE}
+train.dt <- train.dt[, classe := factor(train.dt[, classe])]
+train.dt[, .N, classe]
+```
+
+### Make "classe" variable into a factor 
+```{r fig.height=4,fig.width=6,fig.align='center',echo=TRUE}
+train.dt <- train.dt[, classe := factor(train.dt[, classe])]
+train.dt[, .N, classe]
+```
+
+### Split the dataset into a 60% training and 40% probing dataset
+```{r fig.height=4,fig.width=6,fig.align='center',echo=TRUE}
+require(caret)
+seed <- as.numeric(as.Date("2017-06-14"))
+set.seed(seed)
+in.train <- createDataPartition(train.dt$classe, p=0.6)
+trainset <- train.dt[in.train[[1]]]
+testset <- train.dt[-in.train[[1]]]
+```
+### Conclusion
+* TBD
+
+
