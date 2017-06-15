@@ -12,7 +12,7 @@ framework: io2012
 widgets: mathjax
 ---
 
-````{r setup, cache = FALSE, echo = FALSE, message = FALSE, warning = FALSE, tidy = FALSE, results='hide', error=FALSE}
+````{r setup, cache = TRUE, echo = FALSE, message = FALSE, warning = FALSE, tidy = FALSE, results='hide', error=FALSE}
 # make this an external chunk that can be included in any file
 library(knitr)
 options(width = 100)
@@ -32,17 +32,19 @@ runif(1)
 
 ## Executive Summary 
 * Download the data.
-* step 2
+* Preprocess the data and choose predictiont varaibles. 
+* Split the training data to 60% to 40% to valide the model using random forest. 
+* Get a modle with good performance and appply to final testing set.
 
 ## Download traing data
 ```{r fig.height=4,fig.width=4,echo=TRUE}
 require(data.table)
 url <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
 training.dt <- fread(url)
+str(training.dt)
 
 url <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
 testing.dt <- fread(url)
-str(training.dt)
 ```
 
 ## Process Training Data
@@ -67,11 +69,6 @@ train.dt <- train.dt[, classe := factor(train.dt[, classe])]
 train.dt[, .N, classe]
 ```
 
-### Make "classe" variable into a factor 
-```{r fig.height=4,fig.width=6,fig.align='center',echo=TRUE}
-train.dt <- train.dt[, classe := factor(train.dt[, classe])]
-train.dt[, .N, classe]
-```
 
 ### Split the dataset into a 60% training and 40% probing dataset
 ```{r fig.height=4,fig.width=6,fig.align='center',echo=TRUE}
@@ -82,7 +79,113 @@ in.train <- createDataPartition(train.dt$classe, p=0.6)
 trainset <- train.dt[in.train[[1]]]
 testset <- train.dt[-in.train[[1]]]
 ```
-### Conclusion
-* TBD
+
+### Preprocess the data.
+```{r fig.height=4,fig.width=6,fig.align='center',echo=TRUE}
+pred.data <- trainset[, pred.candidates, with=FALSE]
+pre.proc <- preProcess(pred.data)
+print (pre.proc)
+train.proc <- predict(pre.proc, pred.data)
+train.input <- data.table(data.frame(classe = trainset[, classe], train.proc))
+
+test.data <- testset[, pred.candidates, with=FALSE]
+test.proc <- predict(pre.proc, test.data)
+test.input <- data.table(data.frame(classe = testset[, classe], test.proc))
+
+nzv <- nearZeroVar(train.input, saveMetrics=TRUE)
+if (any(nzv$nzv)) nzv else message("No variables with near zero variance")
+```
+
+
+## Explore the data for prediction
+```{r fig.height=4,fig.width=6,fig.align='center',echo=TRUE}
+histGroup <- function (data, regex) {
+  col <- grep(regex, names(data))
+  col <- c(col, which(names(data) == "classe"))
+  require(reshape2)
+  n <- nrow(data)
+  DMelted <- melt(data[, col, with=FALSE][, rownum := seq(1, n)], id.vars=c("rownum", "classe"))
+  require(ggplot2)
+  ggplot(DMelted, aes(x=classe, y=value)) +
+    geom_violin(aes(color=classe, fill=classe), alpha=1/2) +
+    facet_wrap(~ variable, scale="free_y") +
+    scale_color_brewer(palette="Spectral") +
+    scale_fill_brewer(palette="Spectral") +
+    labs(x="", y="") +
+    theme(legend.position="none")
+}
+histGroup(train.input, "belt")
+histGroup(train.input, "[^(fore)]arm")
+histGroup(train.input, "dumbbell")
+histGroup(train.input, "forearm")
+```
+
+
+## Traing the model
+### Set up clusters
+```{r fig.height=4,fig.width=6,fig.align='center',echo=TRUE}
+require(parallel)
+require(doParallel)
+cl <- makeCluster(detectCores() - 1)
+registerDoParallel(cl)
+```
+### Set the control parameters.
+```{r fig.height=4,fig.width=6,fig.align='center',echo=TRUE}
+ctrl <- trainControl(classProbs=TRUE,
+                     savePredictions=TRUE,
+                     allowParallel=TRUE)
+```
+### Fit Model
+```{r fig.height=4,fig.width=6,fig.align='center',echo=TRUE}
+method <- "rf"
+system.time(trainingModel <- train(classe ~ ., data=train.input, method=method))
+stopCluster(cl)
+```
+
+### Evaluate the model on the training set
+```{r fig.height=4,fig.width=6,fig.align='center',echo=TRUE}
+trainingModel
+hat <- predict(trainingModel, train.input)
+confusionMatrix(hat, train.input[, classe])
+```
+
+### Evaluate the model on the testing set
+```{r fig.height=4,fig.width=6,fig.align='center',echo=TRUE}
+hat <- predict(trainingModel, test.input)
+confusionMatrix(hat, test.input[, classe])
+```
+
+### Save the model
+```{r fig.height=4,fig.width=6,fig.align='center',echo=TRUE}
+varImp(trainingModel)
+trainingModel$finalModel
+save(trainingModel, file="trainingModel.RData")
+```
+#### Error rate is less than 1% 
+
+## Preidict on the test set 
+```{r fig.height=4,fig.width=6,fig.align='center',echo=TRUE}
+load(file="trainingModel.RData", verbose=TRUE)
+#url <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+#testing.dt <- fread(url)
+
+
+final.input <- predict(pre.proc, testing.dt[, pred.candidates, with=FALSE])
+hat <- predict(trainingModel, final.input)
+testing.dt <- cbind(hat , testing.dt)
+subset(testing.dt, select=names(testing.dt)[grep("belt|[^(fore)]arm|dumbbell|forearm", names(testing.dt), invert=TRUE)])
+```
+## Save to target format
+```{r fig.height=4,fig.width=6,fig.align='center',echo=TRUE}
+write.files = function(x){
+  n = length(x)
+  path <- "predictionAssignment_files/answers"
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=file.path(path, filename),quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+write.files(hat)
+```
 
 
