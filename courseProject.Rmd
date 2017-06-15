@@ -97,29 +97,6 @@ if (any(nzv$nzv)) nzv else message("No variables with near zero variance")
 ```
 
 
-## Explore the data for prediction
-```{r fig.height=4,fig.width=6,fig.align='center',echo=TRUE}
-histGroup <- function (data, regex) {
-  col <- grep(regex, names(data))
-  col <- c(col, which(names(data) == "classe"))
-  require(reshape2)
-  n <- nrow(data)
-  DMelted <- melt(data[, col, with=FALSE][, rownum := seq(1, n)], id.vars=c("rownum", "classe"))
-  require(ggplot2)
-  ggplot(DMelted, aes(x=classe, y=value)) +
-    geom_violin(aes(color=classe, fill=classe), alpha=1/2) +
-    facet_wrap(~ variable, scale="free_y") +
-    scale_color_brewer(palette="Spectral") +
-    scale_fill_brewer(palette="Spectral") +
-    labs(x="", y="") +
-    theme(legend.position="none")
-}
-histGroup(train.input, "belt")
-histGroup(train.input, "[^(fore)]arm")
-histGroup(train.input, "dumbbell")
-histGroup(train.input, "forearm")
-```
-
 
 ## Traing the model
 ### Set up clusters
